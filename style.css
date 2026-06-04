@@ -173,15 +173,12 @@ ul{list-style:none}
   background:rgba(255,255,255,.22);
   color:#fff;white-space:nowrap;
 }
-
-/* KE ARAH label */
 .hero-direction-lbl{
   font-size:.68rem;font-weight:700;
   letter-spacing:.12em;
   color:rgba(255,255,255,.65);
   margin-top:10px;margin-bottom:2px;
 }
-
 .hero-dest{
   font-size:1.25rem;font-weight:800;
   color:#fff;margin-bottom:14px;line-height:1.3;
@@ -220,7 +217,6 @@ ul{list-style:none}
 .bl-RANGKASBITUNG{border-left-color:var(--rangkas)}
 .bl-PRIOK        {border-left-color:var(--priok)}
 .bl-CIKARANG     {border-left-color:var(--cikarang)}
-
 .ti-time{
   font-size:1.1rem;font-weight:700;
   color:var(--text);font-variant-numeric:tabular-nums;
@@ -243,10 +239,11 @@ ul{list-style:none}
   font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 .ti-cd.soon{background:rgba(255,149,0,.14);color:#d97700}
-.ti-cd.now {background:rgba(var(--accent-r),.14);color:var(--accent)}
+.ti-cd.now{background:rgba(var(--accent-r),.14);color:var(--accent)}
 
 /* ===== EMPTY STATES ===== */
 .empty-state{text-align:center;padding:60px 20px}
+.empty-icon{font-size:3rem;margin-bottom:14px}
 .empty-state p{font-size:.95rem;line-height:1.75;color:var(--text2)}
 
 /* ===== SEARCH OVERLAY ===== */
@@ -272,6 +269,7 @@ ul{list-style:none}
   padding:13px 16px;
   border-bottom:1px solid var(--border);
 }
+.search-icon{width:18px;height:18px;color:var(--muted);flex-shrink:0}
 .search-input{
   flex:1;background:transparent;
   border:none;outline:none;

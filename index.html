@@ -7,27 +7,36 @@
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
+
+  <!-- FIXED HEADER -->
   <header class="header">
     <div class="live-badge"><span class="live-dot"></span>LIVE</div>
     <span class="header-title">Jadwal KRL</span>
     <div class="clock" id="clock">--:--</div>
   </header>
 
+  <!-- SCROLLABLE PAGE -->
   <div class="page">
+
+    <!-- 1. STATION CARD -->
     <div class="station-card" id="stationCard" onclick="openSearch()">
       <div class="sc-label">STASIUN KAMU</div>
       <div class="sc-row">
         <span class="sc-dot" id="scDot"></span>
         <span class="sc-name" id="scName">Pilih Stasiun</span>
-        <svg class="sc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        <svg class="sc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
     </div>
 
+    <!-- 2. FILTER ARAH -->
     <div class="filter-row" id="dirRow" style="display:none">
       <button class="fpill active" data-dir="ALL" onclick="setDir(this,'ALL')">Semua</button>
       <div id="dirBtns" style="display:contents"></div>
     </div>
 
+    <!-- 3. HERO CARD -->
     <div id="heroSection" style="display:none">
       <div class="hero-pre-label">
         <span class="flash-dot"></span>
@@ -45,24 +54,36 @@
       </div>
     </div>
 
+    <!-- 4. LIST SELANJUTNYA -->
     <div id="listSection" style="display:none">
       <div class="seg-label">SELANJUTNYA</div>
       <div class="train-list" id="trainList"></div>
     </div>
 
+    <!-- 5. EMPTY STATE -->
     <div id="emptyState" class="empty-state">
+      <div class="empty-icon">🚆</div>
       <p>Pilih stasiun untuk melihat<br>jadwal kereta mendatang</p>
     </div>
 
+    <!-- 6. NO TRAINS -->
     <div id="noTrains" style="display:none" class="empty-state">
+      <div class="empty-icon">😴</div>
       <p>Tidak ada kereta mendatang<br>dalam 4 jam ke depan</p>
     </div>
+
   </div>
 
+  <!-- SEARCH OVERLAY -->
   <div class="search-overlay" id="searchOverlay" onclick="handleOverlayClick(event)">
     <div class="search-modal" id="searchModal">
       <div class="search-bar">
-        <input id="searchInput" class="search-input" type="text" placeholder="Cari nama stasiun..." autocomplete="off"/>
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="searchInput" class="search-input" type="text"
+          placeholder="Cari nama stasiun..." autocomplete="off"/>
         <button class="search-cancel" onclick="closeSearch()">Batal</button>
       </div>
       <ul id="searchList" class="search-list"></ul>
