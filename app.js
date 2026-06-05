@@ -8,48 +8,57 @@ const LINE_CFG = {
   NAMBO:         {name:'Nambo',         color:'#607d8b'},
 };
 
-/* Data line untuk tab Rute */
+/* ===== LINES DATA (Tab Rute) ===== */
 const LINES_DATA = [
   {
     key:'BOGOR',
     name:'Bogor Line',
     route:'Jakarta Kota \u2014 Bogor',
-    stations:['Jakarta Kota','Jayakarta','Mangga Besar','Sawah Besar','Juanda','Gambir',
+    stations:[
+      'Jakarta Kota','Jayakarta','Mangga Besar','Sawah Besar','Juanda',
       'Gondangdia','Cikini','Manggarai','Tebet','Cawang','Duren Kalibata',
       'Pasar Minggu Baru','Pasar Minggu','Tanjung Barat','Lenteng Agung',
-      'Universitas Pancasila','Universitas Indonesia','Pondok Cina','Depok Baru',
-      'Depok','Citayam','Bojong Gede','Cilebut','Bogor']
+      'Univ. Pancasila','Univ. Indonesia','Pondok Cina','Depok Baru',
+      'Depok','Citayam','Bojonggede','Cilebut','Bogor'
+    ]
   },
   {
     key:'NAMBO',
     name:'Nambo Branch',
     route:'Citayam \u2014 Nambo',
-    stations:['Citayam','Pondok Jati','Nambo']
+    stations:['Citayam','Pondok Rajeg','Cibinong','Nambo']
   },
   {
     key:'CIKARANG',
     name:'Cikarang Loop',
-    route:'Cikarang \u21ba Manggarai',
-    stations:['Cikarang','Telagamurni','Cibitung','Tambun','Bekasi Timur','Bekasi',
+    route:'Cikarang \u21bb Manggarai',
+    stations:[
+      'Cikarang','Metland Telagamurni','Cibitung','Tambun','Bekasi Timur','Bekasi',
       'Kranji','Cakung','Klender Baru','Buaran','Klender','Jatinegara',
-      'Pondok Jati','Kramat','Gang Sentiong','Pasar Senen','Kemayoran',
-      'Rajawali','Matraman','Manggarai','Sudirman','BNI City','Karet',
-      'Tanah Abang','Duri','Angke','Kampung Bandan','Jakarta Kota']
+      'Matraman','Manggarai','Sudirman','Sudirman Baru','Karet',
+      'Tanah Abang','Duri','Kampung Bandan','Rajawali','Kemayoran',
+      'Pasar Senen','Gang Sentiong','Kramat','Pondok Jati'
+    ]
   },
   {
     key:'RANGKASBITUNG',
     name:'Rangkasbitung Line',
     route:'Tanah Abang \u2014 Rangkasbitung',
-    stations:['Tanah Abang','Palmerah','Kebayoran','Pondok Ranji','Sudimara',
-      'Rawa Buntu','Serpong','Cisauk','Cicayur','Parung Panjang',
-      'Cilejit','Daru','Tenjo','Tigaraksa','Rangkasbitung']
+    stations:[
+      'Tanah Abang','Palmerah','Kebayoran','Pondok Ranji','Jurang Mangu',
+      'Sudimara','Rawa Buntu','Serpong','Cisauk','Cicayur','Jatake',
+      'Parung Panjang','Cilejit','Daru','Tenjo','Tigaraksa',
+      'Cikoya','Citeras','Rangkasbitung'
+    ]
   },
   {
     key:'TANGERANG',
     name:'Tangerang Line',
     route:'Duri \u2014 Tangerang',
-    stations:['Duri','Grogol','Pesing','Taman Kota','Bojong Indah',
-      'Rawa Buaya','Kalideres','Poris','Batu Ceper','Tanah Tinggi','Tangerang']
+    stations:[
+      'Duri','Grogol','Pesing','Taman Kota','Bojong Indah',
+      'Rawa Buaya','Kalideres','Poris','Batu Ceper','Tanah Tinggi','Tangerang'
+    ]
   },
   {
     key:'PRIOK',
@@ -109,6 +118,7 @@ function updateClock(){
 /* ===== TAB SWITCH ===== */
 function switchTab(tab){
   activeTab = tab;
+  localStorage.setItem('anker_tab', tab);
   document.getElementById('pageJadwal').style.display = tab === 'jadwal' ? 'block' : 'none';
   document.getElementById('pageRute').style.display   = tab === 'rute'   ? 'block' : 'none';
   document.getElementById('btnJadwal').classList.toggle('active', tab === 'jadwal');
@@ -122,13 +132,12 @@ function renderRute(){
   container.innerHTML = LINES_DATA.map((line, idx) => {
     const cfg   = LINE_CFG[line.key] || {color:'#888'};
     const count = line.stations.length;
-    const stationsHtml = line.stations.map((s, i) =>
+    const stationsHtml = line.stations.map(s =>
       `<div class="sl-item" style="--lc:${cfg.color}">
         <div class="sl-dot" style="border-color:${cfg.color}"></div>
         <span class="sl-name">${s}</span>
       </div>`
     ).join('');
-
     return `<div class="line-item" id="lineItem${idx}">
       <div class="line-header" onclick="toggleLine(${idx})">
         <div class="line-bar" style="background:${cfg.color}"></div>
@@ -187,7 +196,6 @@ function render(){
     empty.style.display   = 'block';
     return;
   }
-
   empty.style.display = 'none';
   const trains = getUpcoming();
 
@@ -212,7 +220,6 @@ function render(){
   const hcd = document.getElementById('heroCD');
   hcd.textContent     = cdStr(f.arrival);
   hcd.dataset.arrival = f.arrival;
-
   heroSec.style.display = 'block';
 
   /* LIST */
@@ -337,7 +344,6 @@ function tickSecond(){
     }
     el.dataset.arrival = arr;
   });
-
   if(curStation){
     const fresh = getUpcoming();
     const heroEl  = document.getElementById('heroCD');
@@ -356,6 +362,9 @@ function fullRefresh(){
 /* ===== INIT ===== */
 updateClock();
 renderRute();
+
+const savedTab = localStorage.getItem('anker_tab') || 'jadwal';
+switchTab(savedTab);
 
 const saved = localStorage.getItem('anker_station');
 if(saved && STATIONS.includes(saved)){
