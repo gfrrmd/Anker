@@ -324,7 +324,7 @@ function renderSearch(q){
   const el    = document.getElementById('searchList');
   const lower = q.toLowerCase();
   const list  = q
-    ? STATIONS.filter(s => s.toLowerCase().includes(lower)).slice(0,25)
+    ? STATIONS.filter(s => dn(s).toLowerCase().includes(lower) || s.toLowerCase().includes(lower)).slice(0,25)
     : STATIONS.slice(0,40);
   el.innerHTML = list.map(s => {
     const idx   = STATIONS.indexOf(s);
