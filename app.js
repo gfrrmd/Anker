@@ -333,7 +333,7 @@ function renderSearch(q){
     const lStr  = lines.map(l => LINE_CFG[l]?.name || l).join(', ');
     return `<li class="search-item" onclick="selectStation('${s.replace(/'/g,"\\'")}')">
       <span class="si-dot" style="background:${col}"></span>
-      <span class="si-name">${s}</span>
+      <span class="si-name">${dn(s)}</span>
       <span class="si-lines">${lStr}</span>
     </li>`;
   }).join('');
