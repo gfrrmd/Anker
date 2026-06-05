@@ -14,9 +14,11 @@
   --rangkas:#256329;
   --priok:#ad1457;
   --cikarang:#1455a8;
+  --nambo:#607d8b;
   --hdr:#fff;
   --r:14px;
   --hdr-h:54px;
+  --nav-h:60px;
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#111113;
@@ -39,6 +41,7 @@ body{
   overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
   padding-top:calc(var(--hdr-h) + env(safe-area-inset-top,0px));
+  padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 ul{list-style:none}
@@ -75,7 +78,7 @@ ul{list-style:none}
 /* ===== PAGE ===== */
 .page{
   padding:14px 14px;
-  padding-bottom:max(32px,env(safe-area-inset-bottom,20px));
+  padding-bottom:20px;
   min-height:100%;
 }
 
@@ -156,6 +159,7 @@ ul{list-style:none}
 .hbg-RANGKASBITUNG{background:var(--rangkas)}
 .hbg-PRIOK        {background:var(--priok)}
 .hbg-CIKARANG     {background:var(--cikarang)}
+.hbg-NAMBO        {background:var(--nambo)}
 .hbg-default      {background:var(--accent)}
 
 .hero-top{
@@ -217,6 +221,7 @@ ul{list-style:none}
 .bl-RANGKASBITUNG{border-left-color:var(--rangkas)}
 .bl-PRIOK        {border-left-color:var(--priok)}
 .bl-CIKARANG     {border-left-color:var(--cikarang)}
+.bl-NAMBO        {border-left-color:var(--nambo)}
 .ti-time{
   font-size:1.1rem;font-weight:700;
   color:var(--text);font-variant-numeric:tabular-nums;
@@ -243,8 +248,103 @@ ul{list-style:none}
 
 /* ===== EMPTY STATES ===== */
 .empty-state{text-align:center;padding:60px 20px}
-.empty-icon{font-size:3rem;margin-bottom:14px}
+.empty-icon svg{width:64px;height:64px;color:var(--muted);margin-bottom:14px}
 .empty-state p{font-size:.95rem;line-height:1.75;color:var(--text2)}
+
+/* ===== BOTTOM NAV ===== */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:var(--hdr);
+  border-top:1px solid var(--border);
+  display:flex;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  height:calc(var(--nav-h) + env(safe-area-inset-bottom,0px));
+}
+.bnav-item{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;
+  color:var(--muted);
+  -webkit-tap-highlight-color:transparent;
+  transition:color .15s;
+  padding-top:8px;
+}
+.bnav-item svg{width:22px;height:22px;stroke:currentColor}
+.bnav-item span{font-size:.68rem;font-weight:600}
+.bnav-item.active{color:var(--accent)}
+
+/* ===== RUTE PAGE ===== */
+.rute-section-label{
+  font-size:.67rem;font-weight:700;
+  letter-spacing:.1em;color:var(--muted);
+  margin-bottom:10px;
+}
+.line-list{display:flex;flex-direction:column;gap:8px}
+
+/* accordion item */
+.line-item{
+  background:var(--surface);
+  border-radius:var(--r);
+  overflow:hidden;
+  box-shadow:0 1px 5px rgba(0,0,0,.06);
+}
+.line-header{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 16px;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+.line-header:active{opacity:.7}
+.line-bar{
+  width:5px;height:42px;border-radius:3px;flex-shrink:0;
+}
+.line-info{flex:1;min-width:0}
+.line-name{font-size:.97rem;font-weight:700;color:var(--text)}
+.line-route{font-size:.76rem;color:var(--muted);margin-top:2px}
+.line-meta{
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.line-count{
+  font-size:.85rem;font-weight:600;color:var(--text2);
+}
+.line-chevron{
+  width:16px;height:16px;color:var(--muted);
+  transition:transform .25s;flex-shrink:0;
+}
+.line-item.open .line-chevron{transform:rotate(180deg)}
+
+/* station list inside accordion */
+.station-list{
+  display:none;
+  padding:0 16px 16px 16px;
+}
+.line-item.open .station-list{display:block}
+.station-list-inner{
+  display:flex;flex-direction:column;gap:0;
+  padding-left:10px;
+}
+.sl-item{
+  display:flex;align-items:center;gap:10px;
+  position:relative;
+  padding:8px 0;
+}
+/* vertical line */
+.sl-item:not(:last-child)::before{
+  content:"";
+  position:absolute;
+  left:6px;top:22px;
+  width:2px;
+  bottom:-8px;
+  background:var(--lc, #ccc);
+  opacity:.45;
+}
+.sl-dot{
+  width:14px;height:14px;border-radius:50%;
+  border:2.5px solid var(--lc,#ccc);
+  background:var(--surface);
+  flex-shrink:0;z-index:1;
+}
+.sl-name{font-size:.88rem;font-weight:500;color:var(--text)}
 
 /* ===== SEARCH OVERLAY ===== */
 .search-overlay{

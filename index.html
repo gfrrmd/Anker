@@ -11,14 +11,13 @@
   <!-- FIXED HEADER -->
   <header class="header">
     <div class="live-badge"><span class="live-dot"></span>LIVE</div>
-    <span class="header-title">Jadwal KRL</span>
+    <span class="header-title" id="headerTitle">Jadwal KRL</span>
     <div class="clock" id="clock">--:--</div>
   </header>
 
-  <!-- SCROLLABLE PAGE -->
-  <div class="page">
+  <!-- ===== TAB: JADWAL ===== -->
+  <div class="page" id="pageJadwal">
 
-    <!-- 1. STATION CARD -->
     <div class="station-card" id="stationCard" onclick="openSearch()">
       <div class="sc-label">STASIUN KAMU</div>
       <div class="sc-row">
@@ -30,13 +29,11 @@
       </div>
     </div>
 
-    <!-- 2. FILTER ARAH -->
     <div class="filter-row" id="dirRow" style="display:none">
       <button class="fpill active" data-dir="ALL" onclick="setDir(this,'ALL')">Semua</button>
       <div id="dirBtns" style="display:contents"></div>
     </div>
 
-    <!-- 3. HERO CARD -->
     <div id="heroSection" style="display:none">
       <div class="hero-pre-label">
         <span class="flash-dot"></span>
@@ -54,29 +51,69 @@
       </div>
     </div>
 
-    <!-- 4. LIST SELANJUTNYA -->
     <div id="listSection" style="display:none">
       <div class="seg-label">SELANJUTNYA</div>
       <div class="train-list" id="trainList"></div>
     </div>
 
-    <!-- 5. EMPTY STATE -->
     <div id="emptyState" class="empty-state">
-      <div class="empty-icon">🚆</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="14" y="8" width="36" height="40" rx="6"/>
+          <rect x="21" y="16" width="9" height="10" rx="2" fill="currentColor" opacity=".3"/>
+          <rect x="34" y="16" width="9" height="10" rx="2" fill="currentColor" opacity=".3"/>
+          <rect x="21" y="30" width="22" height="3" rx="1.5" fill="currentColor" opacity=".25"/>
+          <circle cx="23" cy="44" r="3" fill="currentColor" opacity=".4"/>
+          <circle cx="41" cy="44" r="3" fill="currentColor" opacity=".4"/>
+          <path d="M8 56 h48" stroke-linecap="round"/>
+          <path d="M4 56 h4 M56 56 h4" stroke-linecap="round"/>
+        </svg>
+      </div>
       <p>Pilih stasiun untuk melihat<br>jadwal kereta mendatang</p>
     </div>
 
-    <!-- 6. NO TRAINS -->
     <div id="noTrains" style="display:none" class="empty-state">
-      <div class="empty-icon">😴</div>
+      <div class="empty-icon">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="32" cy="32" r="24"/>
+          <path d="M20 20 L44 44 M44 20 L20 44" stroke-linecap="round"/>
+        </svg>
+      </div>
       <p>Tidak ada kereta mendatang<br>dalam 4 jam ke depan</p>
     </div>
 
   </div>
 
+  <!-- ===== TAB: RUTE ===== -->
+  <div class="page" id="pageRute" style="display:none">
+    <div class="rute-section-label">JABODETABEK</div>
+    <div class="line-list" id="lineList"></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="bnav-item active" id="btnJadwal" onclick="switchTab('jadwal')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15.5 15.5"/>
+      </svg>
+      <span>Jadwal</span>
+    </button>
+    <button class="bnav-item" id="btnRute" onclick="switchTab('rute')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="5" cy="6" r="2"/>
+        <circle cx="19" cy="6" r="2"/>
+        <circle cx="12" cy="18" r="2"/>
+        <path d="M7 6 h5 q4 0 4 4 v2 q0 4 -4 4 h-1"/>
+        <path d="M10 18 H5 q-2 0 -2 -2 v-7"/>
+      </svg>
+      <span>Rute</span>
+    </button>
+  </nav>
+
   <!-- SEARCH OVERLAY -->
   <div class="search-overlay" id="searchOverlay" onclick="handleOverlayClick(event)">
-    <div class="search-modal" id="searchModal">
+    <div class="search-modal">
       <div class="search-bar">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/>
