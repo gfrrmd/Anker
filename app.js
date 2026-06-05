@@ -68,6 +68,16 @@ const LINES_DATA = [
   },
 ];
 
+/* ===== DISPLAY NAME MAP ===== */
+const DISPLAY_NAME = {
+  "BNI City (Sudirman Baru)": "Sudirman Baru",
+  "Bojong Gede": "Bojonggede",
+  "Telagamurni": "Metland Telagamurni",
+  "Universitas Indonesia": "Univ. Indonesia",
+  "Universitas Pancasila": "Univ. Pancasila",
+};
+function dn(s){ return DISPLAY_NAME[s] || s; }
+
 const TIBA_VISIBLE_SECONDS = 3;
 
 /* ===== STATE ===== */
@@ -276,7 +286,7 @@ function selectStation(name){
   curStation = name;
   curDir = 'ALL';
   localStorage.setItem('anker_station', name);
-  document.getElementById('scName').textContent = name;
+  document.getElementById('scName').textContent = dn(name);
   const idx   = STATIONS.indexOf(name);
   const lines = [...new Set(SCHEDULE.filter(t => t.s[idx] !== undefined).map(lineOf))];
   document.getElementById('scDot').style.background =
@@ -369,7 +379,7 @@ switchTab(savedTab);
 const saved = localStorage.getItem('anker_station');
 if(saved && STATIONS.includes(saved)){
   curStation = saved;
-  document.getElementById('scName').textContent = saved;
+  document.getElementById('scName').textContent = dn(saved);
   const idx   = STATIONS.indexOf(saved);
   const lines = [...new Set(SCHEDULE.filter(t => t.s[idx] !== undefined).map(lineOf))];
   document.getElementById('scDot').style.background =
