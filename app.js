@@ -81,39 +81,61 @@ function dn(s){ return DISPLAY_NAME[s] || s; }
 const TIBA_VISIBLE_SECONDS = 3;
 
 /* ===== STATE ===== */
-let curStation = null;
-let curDir     = 'ALL';
+let curStation = null, curDir = 'ALL';
 let nowMin = 0, nowSec = 0;
-let activeTab  = 'jadwal';
+let activeTab = 'jadwal';
+let searchTarget = 'jadwal';
+const plan = { from:null, to:null, mode:'now', time:'08:00', results:[], cursor:0, key:'' };
+const openTrips = new Set();
+const lineSel = {};          // idx -> trip id
+let hidePassed = true;
 
 /* ===== UTILS ===== */
+const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2,'0');
+const ic = (n, c='') => `<svg class="ic ${c}"><use href="#i-${n}"/></svg>`;
+const esc = s => String(s).replace(/'/g,"\\'");
+const NS = STATIONS.length;
+const sIdx = name => STATIONS.indexOf(name);
 
 function getWIB(){
   const n = new Date();
   return new Date(n.getTime() + n.getTimezoneOffset()*60000 + 7*3600000);
 }
-
-function toStr(m){
-  return m == null ? '--:--' : `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`;
-}
-
+function toStr(m){ return m == null ? '--:--' : `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`; }
+function nowF(){ return nowMin + nowSec/60; }
 function lineOf(t){ return LINE_MAP[t.l] || t.l; }
+function durStr(m){ return m >= 60 ? `${Math.floor(m/60)} j ${m%60} mnt` : `${m} mnt`; }
+function lc(key){ return (LINE_CFG[key] && LINE_CFG[key].color) || '#16a34a'; }
+function ln(key){ return (LINE_CFG[key] && LINE_CFG[key].name) || key; }
 
 function cdStr(arrMin){
-  const totalSec = (arrMin - nowMin)*60 - nowSec;
-  if(totalSec <= 0 && totalSec >= -TIBA_VISIBLE_SECONDS) return 'Tiba';
-  if(totalSec <= 0) return 'Tiba';
-  const m = Math.floor(totalSec/60), s = totalSec % 60;
+  const total = (arrMin - nowMin)*60 - nowSec;
+  if(total <= 0) return 'Tiba';
+  const m = Math.floor(total/60), s = total % 60;
   if(m >= 60) return `${Math.floor(m/60)}j ${m%60}m`;
   return `${pad(m)}:${pad(s)}`;
 }
-
 function cdCls(arrMin){
-  const totalSec = (arrMin - nowMin)*60 - nowSec;
-  if(totalSec <= 0 && totalSec >= -TIBA_VISIBLE_SECONDS) return 'now';
-  if(totalSec > 0 && totalSec <= 300) return 'soon';
+  const total = (arrMin - nowMin)*60 - nowSec;
+  if(total <= 0 && total >= -TIBA_VISIBLE_SECONDS) return 'now';
+  if(total > 0 && total <= 300) return 'soon';
   return '';
+}
+
+/* ===== TRIPS (urut per waktu, sembunyikan KA yang batal hari ini) ===== */
+let TRIPS = null;
+function trips(){
+  if(TRIPS) return TRIPS;
+  const weekend = [0,6].includes(getWIB().getDay());
+  TRIPS = [];
+  SCHEDULE.forEach((t,i) => {
+    if(weekend && /Batal/.test(t.n) && /Sabtu|Minggu/.test(t.n)) return;
+    const st = Object.entries(t.s).map(([k,v]) => ({s:+k, t:v})).sort((a,b) => a.t-b.t);
+    const parts = t.r.split(' - ');
+    TRIPS.push({ id:i, line:lineOf(t), ka:t.k, r:t.r, org:parts[0].trim(), dest:parts[parts.length-1].split('/').pop().trim(), st, m:t.s });
+  });
+  return TRIPS;
 }
 
 /* ===== CLOCK ===== */
@@ -121,222 +143,516 @@ function updateClock(){
   const d = getWIB();
   nowMin = d.getHours()*60 + d.getMinutes();
   nowSec = d.getSeconds();
-  document.getElementById('clock').textContent =
-    `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/* ===== TAB SWITCH ===== */
+/* ===== TABS ===== */
+const TABS = ['jadwal','rute','jalur'];
+const TAB_TITLE = { jadwal:'Jadwal KRL', rute:'Cek Rute', jalur:'Jalur KRL' };
 function switchTab(tab){
+  const prev = activeTab;
   activeTab = tab;
   localStorage.setItem('anker_tab', tab);
-  document.getElementById('pageJadwal').style.display = tab === 'jadwal' ? 'block' : 'none';
-  document.getElementById('pageRute').style.display   = tab === 'rute'   ? 'block' : 'none';
-  document.getElementById('btnJadwal').classList.toggle('active', tab === 'jadwal');
-  document.getElementById('btnRute').classList.toggle('active',   tab === 'rute');
-  document.getElementById('headerTitle').textContent  = tab === 'jadwal' ? 'Jadwal KRL' : 'Rute KRL';
+  TABS.forEach(t => {
+    const pg = $('page' + t[0].toUpperCase() + t.slice(1));
+    const show = t === tab;
+    if(show){
+      pg.hidden = false;
+      if(prev !== tab){ pg.classList.remove('enter'); void pg.offsetWidth; pg.classList.add('enter'); }
+    } else pg.hidden = true;
+    $('btn' + t[0].toUpperCase() + t.slice(1)).classList.toggle('active', show);
+  });
+  $('headerTitle').textContent = TAB_TITLE[tab];
+  $('navPill').style.transform = `translateX(${TABS.indexOf(tab)*100}%)`;
+  if(tab === 'jalur') requestAnimationFrame(positionBadges);
 }
 
-/* ===== RENDER RUTE ===== */
-function renderRute(){
-  const container = document.getElementById('lineList');
-  container.innerHTML = LINES_DATA.map((line, idx) => {
-    const cfg   = LINE_CFG[line.key] || {color:'#888'};
-    const count = line.stations.length;
-    const stationsHtml = line.stations.map(s =>
-      `<div class="sl-item" style="--lc:${cfg.color}">
-        <div class="sl-dot" style="border-color:${cfg.color}"></div>
-        <span class="sl-name">${s}</span>
-      </div>`
-    ).join('');
-    return `<div class="line-item" id="lineItem${idx}">
-      <div class="line-header" onclick="toggleLine(${idx})">
-        <div class="line-bar" style="background:${cfg.color}"></div>
-        <div class="line-info">
-          <div class="line-name">${line.name}</div>
-          <div class="line-route">${line.route}</div>
-        </div>
-        <div class="line-meta">
-          <span class="line-count">${count}</span>
-          <svg class="line-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </div>
-      </div>
-      <div class="station-list">
-        <div class="station-list-inner">${stationsHtml}</div>
-      </div>
+/* ===== TIMELINE (bullet kereta berjalan) ===== */
+function tlRows(stops, opts={}){
+  return stops.map((s,i) => {
+    const first = i === 0, last = i === stops.length-1;
+    return `<div class="tl-row${first?' first':''}${last?' last':''}" data-t="${s.t}">
+      <span class="tl-dot"></span>
+      <div class="tl-txt"><b>${dn(STATIONS[s.s])}</b><small class="tl-st"></small></div>
+      <span class="tl-time">${toStr(s.t)}</span>
     </div>`;
   }).join('');
 }
-
-function toggleLine(idx){
-  const el = document.getElementById('lineItem' + idx);
-  el.classList.toggle('open');
+function timeline(stops, color, live=true){
+  return `<div class="tl${live?' live':''}" style="--lc:${color}" data-first="${stops[0].t}" data-last="${stops[stops.length-1].t}">
+    <span class="tl-track"></span><span class="tl-ahead"></span>
+    ${live ? `<span class="tl-badge">${ic('train')}</span>` : ''}
+    ${tlRows(stops)}
+  </div>`;
 }
 
-/* ===== GET UPCOMING ===== */
+/* posisi bullet mengikuti jadwal: interpolasi antar perhentian */
+function positionBadges(){
+  const now = nowMin*60 + nowSec;
+  document.querySelectorAll('.tl.live').forEach(tl => {
+    if(!tl.offsetParent) return;
+    const rows = [...tl.querySelectorAll('.tl-row')];
+    let nextSet = false, y = null, status = 'before';
+    rows.forEach((r,i) => {
+      const t = +r.dataset.t*60;
+      const passed = t <= now;
+      r.classList.toggle('passed', passed);
+      const isNext = !passed && !nextSet;
+      if(isNext) nextSet = true;
+      r.classList.toggle('next', isNext);
+      r.querySelector('.tl-st').textContent = passed ? 'Sudah berangkat' : 'Dijadwalkan';
+    });
+    const center = r => r.offsetTop + r.offsetHeight/2;
+    const firstT = +rows[0].dataset.t*60, lastT = +rows[rows.length-1].dataset.t*60;
+    if(now < firstT) status = 'before';
+    else if(now >= lastT) status = 'after';
+    else {
+      status = 'run';
+      for(let i=0;i<rows.length-1;i++){
+        const a = +rows[i].dataset.t*60, b = +rows[i+1].dataset.t*60;
+        if(now >= a && now < b){
+          const f = b === a ? 0 : (now-a)/(b-a);
+          y = center(rows[i]) + (center(rows[i+1]) - center(rows[i]))*f;
+          break;
+        }
+      }
+    }
+    const badge = tl.querySelector('.tl-badge'), ahead = tl.querySelector('.tl-ahead');
+    tl.dataset.status = status;
+    if(status === 'run'){
+      badge.style.transform = `translateY(${y-15}px)`;
+      ahead.style.top = y + 'px';
+    } else if(status === 'before'){
+      const y0 = center(rows[0]);
+      badge.style.transform = `translateY(${y0-15}px)`; ahead.style.top = y0 + 'px';
+    } else {
+      const y1 = center(rows[rows.length-1]);
+      badge.style.transform = `translateY(${y1-15}px)`; ahead.style.top = y1 + 'px';
+    }
+  });
+}
+function settleBadges(ms=420){
+  const t0 = performance.now();
+  (function f(){ positionBadges(); if(performance.now()-t0 < ms) requestAnimationFrame(f); })();
+}
+
+/* ===== COLLAPSE helper ===== */
+function toggleOpen(el, force){
+  const open = force !== undefined ? force : !el.classList.contains('open');
+  el.classList.toggle('open', open);
+  return open;
+}
+
+/* ===== JALUR (accordion + kereta berjalan) ===== */
+function lineTrips(key){
+  return trips().filter(t => key === 'NAMBO' ? /Nambo/.test(t.r) : t.line === key);
+}
+function pickChips(key){
+  const f = nowF(), all = lineTrips(key);
+  const act = all.filter(t => t.st[0].t <= f && t.st[t.st.length-1].t >= f).sort((a,b) => b.st[0].t - a.st[0].t).slice(0,4);
+  const up  = all.filter(t => t.st[0].t > f).sort((a,b) => a.st[0].t - b.st[0].t).slice(0, 8 - act.length);
+  return [...act, ...up];
+}
+function renderRute(){
+  $('lineList').innerHTML = LINES_DATA.map((line, idx) => {
+    const c = lc(line.key);
+    return `<div class="line-item" id="lineItem${idx}" style="--lc:${c}">
+      <button class="line-header" onclick="toggleLine(${idx})">
+        <span class="line-bar"></span>
+        <span class="line-info"><span class="line-name">${line.name}</span><span class="line-route">${line.route}</span></span>
+        <span class="line-meta"><span class="line-count">${line.stations.length} stasiun</span>${ic('chev','line-chevron')}</span>
+      </button>
+      <div class="collapse"><div><div class="line-panel" id="linePanel${idx}"></div></div></div>
+    </div>`;
+  }).join('');
+}
+function toggleLine(idx){
+  const el = $('lineItem' + idx);
+  const open = toggleOpen(el);
+  if(open){ buildLinePanel(idx); setTimeout(settleBadges, 20); settleBadges(520); }
+}
+function buildLinePanel(idx){
+  const line = LINES_DATA[idx], list = pickChips(line.key), c = lc(line.key);
+  const panel = $('linePanel' + idx);
+  if(!list.length){
+    panel.innerHTML = `<div class="panel-empty">Belum ada kereta pada jalur ini saat ini.</div>`;
+    return;
+  }
+  let sel = list.find(t => t.id === lineSel[idx]) || list[0];
+  lineSel[idx] = sel.id;
+  const f = nowF();
+  const chips = list.map(t => {
+    const run = t.st[0].t <= f;
+    return `<button class="tchip${t.id===sel.id?' active':''}" onclick="pickLineTrip(${idx},${t.id})">
+      <b>${toStr(t.st[0].t)}</b><small>${run ? 'Berjalan' : dn(t.dest)}</small></button>`;
+  }).join('');
+  panel.innerHTML = `
+    <div class="chips">${chips}</div>
+    <div class="tl-head">
+      <div><b>KA ${sel.ka}</b><small>${dn(sel.org)} ${ic('arrow','mini')} ${dn(sel.dest)}</small></div>
+      <button class="tl-toggle${hidePassed?' on':''}" onclick="togglePassed()">${ic('chev')}<span>${hidePassed ? 'Tampilkan' : 'Sembunyikan'} perhentian sebelumnya</span></button>
+    </div>
+    <div class="tl-wrap${hidePassed?' hide-passed':''}">${timeline(sel.st, c)}</div>`;
+  positionBadges();
+}
+function pickLineTrip(idx, id){ lineSel[idx] = id; buildLinePanel(idx); settleBadges(); }
+function togglePassed(){
+  hidePassed = !hidePassed;
+  document.querySelectorAll('.tl-wrap').forEach(w => w.classList.toggle('hide-passed', hidePassed));
+  document.querySelectorAll('.tl-toggle').forEach(b => {
+    b.classList.toggle('on', hidePassed);
+    b.querySelector('span').textContent = (hidePassed ? 'Tampilkan' : 'Sembunyikan') + ' perhentian sebelumnya';
+  });
+  settleBadges(500);
+}
+
+/* ===== JADWAL ===== */
 function getUpcoming(limit=20){
-  const idx = STATIONS.indexOf(curStation);
+  const idx = sIdx(curStation);
   if(idx < 0) return [];
   const res = [], end = nowMin + 240;
-  for(const t of SCHEDULE){
-    const am = t.s[idx];
+  for(const t of trips()){
+    const am = t.m[idx];
     if(am === undefined || am > end) continue;
-    const totalSec = (am - nowMin)*60 - nowSec;
-    if(totalSec < -TIBA_VISIBLE_SECONDS) continue;
-    const dest = t.r.split(' - ').pop()?.trim() || '';
-    if(curDir !== 'ALL' && dest !== curDir) continue;
-    res.push({ arrival:am, dest:dest.toUpperCase(), ka:t.k, line:lineOf(t) });
+    if((am - nowMin)*60 - nowSec < -TIBA_VISIBLE_SECONDS) continue;
+    if(curDir !== 'ALL' && t.dest !== curDir) continue;
+    res.push({ arrival:am, dest:t.dest.toUpperCase(), ka:t.ka, line:t.line, trip:t });
   }
   res.sort((a,b) => a.arrival - b.arrival);
   return res.slice(0, limit);
 }
 
-/* ===== RENDER JADWAL ===== */
+function setHidden(id, h){ $(id).hidden = h; }
+
 function render(){
-  const heroSec = document.getElementById('heroSection');
-  const listSec = document.getElementById('listSection');
-  const empty   = document.getElementById('emptyState');
-  const noTr    = document.getElementById('noTrains');
-
   if(!curStation){
-    heroSec.style.display = 'none';
-    listSec.style.display = 'none';
-    noTr.style.display    = 'none';
-    empty.style.display   = 'block';
+    setHidden('heroSection',true); setHidden('listSection',true); setHidden('noTrains',true); setHidden('emptyState',false);
     return;
   }
-  empty.style.display = 'none';
-  const trains = getUpcoming();
-
-  if(!trains.length){
-    heroSec.style.display = 'none';
-    listSec.style.display = 'none';
-    noTr.style.display    = 'block';
+  setHidden('emptyState', true);
+  const list = getUpcoming();
+  if(!list.length){
+    setHidden('heroSection',true); setHidden('listSection',true); setHidden('noTrains',false);
     return;
   }
-  noTr.style.display = 'none';
-
-  /* HERO */
-  const f   = trains[0];
-  const cfg = LINE_CFG[f.line] || {name:f.line, color:'#1b8c3e'};
-  const hc  = document.getElementById('heroCard');
-  hc.className = `hero-card hbg-${f.line}`;
-
-  document.getElementById('heroTime').textContent  = toStr(f.arrival);
-  document.getElementById('heroBadge').textContent = cfg.name;
-  document.getElementById('heroDest').textContent  = '\u2192 ' + f.dest;
-
-  const hcd = document.getElementById('heroCD');
-  hcd.textContent     = cdStr(f.arrival);
+  setHidden('noTrains', true);
+  const f = list[0], hc = $('heroCard');
+  const changed = hc.dataset.key !== f.ka + ':' + f.arrival;
+  hc.style.setProperty('--hc', lc(f.line));
+  hc.dataset.key = f.ka + ':' + f.arrival;
+  $('heroTime').textContent  = toStr(f.arrival);
+  $('heroBadge').textContent = ln(f.line);
+  $('heroDest').textContent  = f.dest;
+  const hcd = $('heroCD');
+  hcd.textContent = cdStr(f.arrival);
   hcd.dataset.arrival = f.arrival;
-  heroSec.style.display = 'block';
+  setHidden('heroSection', false);
+  if(changed){ hc.classList.remove('swap'); void hc.offsetWidth; hc.classList.add('swap'); }
 
-  /* LIST */
-  const rest = trains.slice(1);
-  if(rest.length){
-    listSec.style.display = 'block';
-    document.getElementById('trainList').innerHTML = rest.map(tr => {
-      const c  = LINE_CFG[tr.line] || {color:'#888', name:tr.line};
-      const cd = cdStr(tr.arrival);
-      const cl = cdCls(tr.arrival);
-      return `<div class="train-item bl-${tr.line}" style="border-left-color:${c.color}">
+  const rest = list.slice(1);
+  if(!rest.length){ setHidden('listSection', true); return; }
+  setHidden('listSection', false);
+  const idx = sIdx(curStation);
+  $('trainList').innerHTML = rest.map((tr,i) => {
+    const key = tr.trip.id + ':' + tr.arrival;
+    const stops = tr.trip.st.filter(s => s.t >= tr.arrival || s.s === idx);
+    const open = openTrips.has(key);
+    return `<div class="train-item${open?' open':''}" data-key="${key}" data-trip="${tr.trip.id}" style="--lc:${lc(tr.line)};--i:${i}">
+      <button class="ti-main" onclick="toggleTrain(this.parentNode)">
         <span class="ti-time">${toStr(tr.arrival)}</span>
-        <div class="ti-body">
-          <div class="ti-dest">\u2192 ${tr.dest}</div>
-          <div class="ti-sub">${c.name} \u00b7 ${tr.ka}</div>
-        </div>
-        <span class="ti-cd ${cl}" data-arrival="${tr.arrival}">${cd}</span>
-      </div>`;
-    }).join('');
-  } else {
-    listSec.style.display = 'none';
-  }
+        <span class="ti-body">
+          <span class="ti-dest">${ic('arrow','mini')}${tr.dest}</span>
+          <span class="ti-sub">${ln(tr.line)} · KA ${tr.ka}</span>
+        </span>
+        <span class="ti-cd ${cdCls(tr.arrival)}" data-arrival="${tr.arrival}">${cdStr(tr.arrival)}</span>
+        ${ic('chev','ti-chev')}
+      </button>
+      <div class="collapse"><div><div class="ti-detail hide-passed">${open ? timeline(tr.trip.st, lc(tr.line)) : ''}</div></div></div>
+    </div>`;
+  }).join('');
+  if(openTrips.size) settleBadges();
+}
+function toggleTrain(el){
+  const key = el.dataset.key, trip = trips().find(t => t.id === +el.dataset.trip);
+  const open = toggleOpen(el);
+  open ? openTrips.add(key) : openTrips.delete(key);
+  const box = el.querySelector('.ti-detail');
+  if(open && !box.innerHTML) box.innerHTML = timeline(trip.st, lc(trip.line));
+  settleBadges(480);
 }
 
-/* ===== DIRECTION TABS ===== */
 function buildDirTabs(){
-  const idx = STATIONS.indexOf(curStation);
-  const destSet = new Set();
-  SCHEDULE.forEach(t => {
-    if(t.s[idx] === undefined) return;
-    const d = t.r.split(' - ').pop()?.trim();
-    if(d) destSet.add(d);
-  });
-  const dests = [...destSet].sort();
-  document.getElementById('dirBtns').innerHTML = dests.map(d =>
-    `<button class="fpill" data-dir="${d}"
-      onclick="setDir(this,'${d.replace(/'/g,"\\'")}')">
-      \u2192 ${d}</button>`
-  ).join('');
+  const idx = sIdx(curStation), set = new Set();
+  trips().forEach(t => { if(t.m[idx] !== undefined) set.add(t.dest); });
+  $('dirBtns').innerHTML = [...set].sort().map(d =>
+    `<button class="fpill" data-dir="${d}" onclick="setDir(this,'${esc(d)}')">${ic('arrow','mini')}${d}</button>`).join('');
   document.querySelectorAll('#dirRow .fpill').forEach(b => b.classList.remove('active'));
   document.querySelector('#dirRow .fpill[data-dir="ALL"]').classList.add('active');
-  document.getElementById('dirRow').style.display = 'flex';
+  $('dirRow').hidden = false;
 }
-
 function setDir(btn, dir){
   curDir = dir;
   document.querySelectorAll('#dirRow .fpill').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   render();
 }
-
-/* ===== SELECT STATION ===== */
+function stationColor(name){
+  const idx = sIdx(name);
+  const l = trips().find(t => t.m[idx] !== undefined);
+  return l ? lc(l.line) : 'var(--accent)';
+}
 function selectStation(name){
-  curStation = name;
-  curDir = 'ALL';
+  curStation = name; curDir = 'ALL';
   localStorage.setItem('anker_station', name);
-  document.getElementById('scName').textContent = dn(name);
-  const idx   = STATIONS.indexOf(name);
-  const lines = [...new Set(SCHEDULE.filter(t => t.s[idx] !== undefined).map(lineOf))];
-  document.getElementById('scDot').style.background =
-    LINE_CFG[lines[0]]?.color || 'var(--accent)';
-  closeSearch();
+  $('scName').textContent = dn(name);
+  $('scDot').style.background = stationColor(name);
   buildDirTabs();
   render();
 }
 
 /* ===== SEARCH ===== */
-function openSearch(){
-  document.getElementById('searchOverlay').classList.add('open');
-  const input = document.getElementById('searchInput');
-  input.value = '';
+const POPULAR = ['Manggarai','Tanah Abang','Jakarta Kota','Sudirman','Bogor','Bekasi','Duri','Depok','Rangkasbitung','Tangerang'];
+function getRecent(){ try{ return JSON.parse(localStorage.getItem('anker_recent')||'[]').filter(s => STATIONS.includes(s)); }catch(e){ return []; } }
+function pushRecent(name){
+  const r = [name, ...getRecent().filter(s => s !== name)].slice(0,5);
+  localStorage.setItem('anker_recent', JSON.stringify(r));
+}
+function openSearch(target='jadwal'){
+  searchTarget = target;
+  $('searchTitle').textContent = { jadwal:'Pilih stasiun kamu', from:'Stasiun asal', to:'Stasiun tujuan' }[target];
+  $('searchOverlay').classList.add('open');
+  const input = $('searchInput'); input.value = '';
   renderSearch('');
-  setTimeout(() => input.focus(), 80);
+  setTimeout(() => input.focus(), 120);
 }
-
 function closeSearch(){
-  document.getElementById('searchOverlay').classList.remove('open');
-  const input = document.getElementById('searchInput');
-  input.blur();
-  input.value = '';
+  $('searchOverlay').classList.remove('open');
+  $('searchInput').blur(); $('searchInput').value = '';
 }
-
-function handleOverlayClick(e){
-  if(e.target === document.getElementById('searchOverlay')) closeSearch();
+function handleOverlayClick(e){ if(e.target === $('searchOverlay')) closeSearch(); }
+function pickStation(name){
+  pushRecent(name);
+  closeSearch();
+  if(searchTarget === 'jadwal') selectStation(name);
+  else setPlanStation(searchTarget, name);
 }
+$('searchInput').addEventListener('input', e => renderSearch(e.target.value.trim()));
 
-document.getElementById('searchInput').addEventListener('input', e => {
-  renderSearch(e.target.value.trim());
-});
-
+function stationLines(name){
+  const idx = sIdx(name);
+  return [...new Set(trips().filter(t => t.m[idx] !== undefined).map(t => t.line))];
+}
+function hl(name, q){
+  const i = name.toLowerCase().indexOf(q.toLowerCase());
+  return i < 0 ? name : `${name.slice(0,i)}<em>${name.slice(i,i+q.length)}</em>${name.slice(i+q.length)}`;
+}
+function resultRow(s, q=''){
+  const ls = stationLines(s);
+  const dots = ls.map(l => `<span class="si-dot" style="background:${lc(l)}"></span>`).join('');
+  return `<button class="search-item" onclick="pickStation('${esc(s)}')">
+    <span class="si-dots">${dots}</span>
+    <span class="si-name">${q ? hl(dn(s), q) : dn(s)}</span>
+    <span class="si-lines">${ls.map(ln).join(', ')}</span></button>`;
+}
 function renderSearch(q){
-  const el    = document.getElementById('searchList');
+  const el = $('searchBody');
+  if(!q){
+    const rec = getRecent();
+    el.innerHTML = `
+      <div class="search-hint">${ic('search')}<p>Ketik nama stasiun, misalnya <b>Manggarai</b> atau <b>Bekasi</b>. Tersedia ${NS} stasiun KRL Jabodetabek.</p></div>
+      ${rec.length ? `<div class="sb-label">Terakhir dipakai</div><div class="sb-list">${rec.map(s => resultRow(s)).join('')}</div>` : ''}
+      <div class="sb-label">Stasiun besar</div>
+      <div class="pop-chips">${POPULAR.filter(s => STATIONS.includes(s)).map(s => `<button class="pchip" onclick="pickStation('${esc(s)}')">${dn(s)}</button>`).join('')}</div>`;
+    return;
+  }
   const lower = q.toLowerCase();
-  const list  = q
-    ? STATIONS.filter(s => dn(s).toLowerCase().includes(lower) || s.toLowerCase().includes(lower)).slice(0,25)
-    : STATIONS.slice(0,40);
-  el.innerHTML = list.map(s => {
-    const idx   = STATIONS.indexOf(s);
-    const lines = [...new Set(SCHEDULE.filter(t => t.s[idx] !== undefined).map(lineOf))];
-    const col   = LINE_CFG[lines[0]]?.color || '#888';
-    const lStr  = lines.map(l => LINE_CFG[l]?.name || l).join(', ');
-    return `<li class="search-item" onclick="selectStation('${s.replace(/'/g,"\\'")}')">
-      <span class="si-dot" style="background:${col}"></span>
-      <span class="si-name">${dn(s)}</span>
-      <span class="si-lines">${lStr}</span>
-    </li>`;
+  const hits = STATIONS.filter(s => dn(s).toLowerCase().includes(lower) || s.toLowerCase().includes(lower))
+    .sort((a,b) => (dn(b).toLowerCase().startsWith(lower)) - (dn(a).toLowerCase().startsWith(lower)) || dn(a).localeCompare(dn(b)));
+  el.innerHTML = hits.length
+    ? `<div class="sb-label">${hits.length} stasiun ditemukan</div><div class="sb-list">${hits.map(s => resultRow(s, q)).join('')}</div>`
+    : `<div class="search-hint miss">${ic('search')}<p>Tidak ada stasiun bernama <b>“${q.replace(/</g,'&lt;')}”</b>. Periksa ejaan atau coba sebagian katanya saja.</p></div>`;
+}
+
+/* ===== RENCANA PERJALANAN (RAPTOR) ===== */
+function raptor(o, d, T, maxK=4){
+  const INF = 1e9, TR = 2, TS = trips();
+  const best = new Array(NS).fill(INF);
+  const tau = [new Array(NS).fill(INF)], par = [{}];
+  tau[0][o] = T; best[o] = T;
+  const out = [];
+  for(let k=1; k<=maxK; k++){
+    tau[k] = new Array(NS).fill(INF); par[k] = {};
+    for(const tr of TS){
+      let b = -1;
+      for(let j=0; j<tr.st.length; j++){
+        const {s,t} = tr.st[j];
+        if(b >= 0 && t < best[s]){ tau[k][s] = t; best[s] = t; par[k][s] = {tr, from:b, to:j}; }
+        if(b < 0){
+          const p = tau[k-1][s];
+          if(p < INF && p + (k===1 ? 0 : TR) <= t) b = j;
+        }
+      }
+    }
+    if(tau[k][d] < INF){
+      const legs = []; let s = d;
+      for(let kk=k; kk>=1; kk--){
+        const p = par[kk][s];
+        legs.unshift({ tr:p.tr, from:p.from, to:p.to });
+        s = p.tr.st[p.from].s;
+      }
+      out.push(mkJourney(legs));
+    }
+  }
+  return out;
+}
+function mkJourney(legs){
+  const first = legs[0], last = legs[legs.length-1];
+  return { legs, dep:first.tr.st[first.from].t, arr:last.tr.st[last.to].t,
+    key: legs.map(l => l.tr.id + ':' + l.from).join('|') };
+}
+function findJourneys(o, d, T, want=5){
+  const out = [], seen = new Set();
+  let t = T, guard = 0;
+  while(out.length < want && t < 1440 && guard++ < 12){
+    const js = raptor(o, d, t);
+    if(!js.length) break;
+    js.forEach(j => { if(!seen.has(j.key)){ seen.add(j.key); out.push(j); } });
+    t = Math.min(...js.map(j => j.dep)) + 1;
+  }
+  const dom = (a,b) => a !== b && b.dep >= a.dep && b.arr <= a.arr && b.legs.length <= a.legs.length;
+  return out.filter(a => !out.some(b => dom(a,b))).sort((a,b) => a.dep - b.dep || a.arr - b.arr).slice(0, want);
+}
+
+function setPlanStation(which, name){
+  plan[which] = name;
+  const el = $(which === 'from' ? 'pfFrom' : 'pfTo');
+  el.textContent = dn(name); el.classList.remove('ph');
+  localStorage.setItem('anker_plan', JSON.stringify({from:plan.from, to:plan.to}));
+  if(plan.from && plan.to) runPlan();
+}
+function swapPlan(){
+  const b = document.querySelector('.swap-btn svg');
+  b.style.transform = `rotate(${(b._r = (b._r||0) + 180)}deg)`;
+  const f = plan.from, t = plan.to;
+  plan.from = plan.to = null;
+  $('pfFrom').textContent = 'Pilih stasiun asal'; $('pfFrom').classList.add('ph');
+  $('pfTo').textContent = 'Pilih stasiun tujuan'; $('pfTo').classList.add('ph');
+  if(t) setPlanStationQuiet('from', t);
+  if(f) setPlanStationQuiet('to', f);
+  if(plan.from && plan.to) runPlan();
+}
+function setPlanStationQuiet(which, name){
+  plan[which] = name;
+  const el = $(which === 'from' ? 'pfFrom' : 'pfTo');
+  el.textContent = dn(name); el.classList.remove('ph');
+}
+function setTimeMode(m){
+  plan.mode = m;
+  document.querySelectorAll('#timeSeg button').forEach(b => b.classList.toggle('active', b.dataset.m === m));
+  $('segThumb').style.transform = `translateX(${m === 'time' ? 100 : 0}%)`;
+  $('timeBox').classList.toggle('open', m === 'time');
+  if(m === 'time' && !$('timeInput').dataset.touched){
+    $('timeInput').value = `${pad(Math.floor(nowMin/60))}:${pad(nowMin%60)}`;
+  }
+  if(plan.from && plan.to && plan.results.length) runPlan();
+}
+$('timeInput').addEventListener('change', e => { e.target.dataset.touched = 1; if(plan.from && plan.to) runPlan(); });
+
+function startMinutes(){
+  if(plan.mode === 'now') return nowMin;
+  const [h,m] = ($('timeInput').value || '00:00').split(':').map(Number);
+  return h*60 + m;
+}
+function runPlan(){
+  const out = $('planOut');
+  if(!plan.from || !plan.to){
+    out.innerHTML = `<div class="plan-note">${ic('route')}<p>Pilih stasiun asal dan tujuan dulu.</p></div>`;
+    return;
+  }
+  if(plan.from === plan.to){
+    out.innerHTML = `<div class="plan-note">${ic('route')}<p>Asal dan tujuan sama. Pilih stasiun yang berbeda.</p></div>`;
+    return;
+  }
+  const T = startMinutes();
+  plan.start = T;
+  plan.results = findJourneys(sIdx(plan.from), sIdx(plan.to), T, 5);
+  plan.cursor = plan.results.length ? plan.results[plan.results.length-1].dep + 1 : T;
+  renderPlan();
+}
+function morePlan(){
+  const js = findJourneys(sIdx(plan.from), sIdx(plan.to), plan.cursor, 4);
+  const have = new Set(plan.results.map(j => j.key));
+  const add = js.filter(j => !have.has(j.key));
+  if(!add.length){ plan.exhausted = true; }
+  plan.results = plan.results.concat(add);
+  if(add.length) plan.cursor = add[add.length-1].dep + 1;
+  renderPlan(true);
+}
+function legPill(l){
+  const c = lc(l.tr.line);
+  return `<span class="lpill" style="--lc:${c}"><i></i>${ln(l.tr.line)}</span>`;
+}
+function renderPlan(keepOpen){
+  const out = $('planOut'), rs = plan.results;
+  const openSet = new Set([...document.querySelectorAll('.jcard.open')].map(e => e.dataset.key));
+  if(!rs.length){
+    out.innerHTML = `<div class="plan-note">${ic('clock')}<p>Tidak ada kereta dari <b>${dn(plan.from)}</b> ke <b>${dn(plan.to)}</b> setelah pukul ${toStr(plan.start)}. Coba jam lebih pagi.</p></div>`;
+    return;
+  }
+  const durs = rs.map(j => j.arr - j.dep), mn = Math.min(...durs), mx = Math.max(...durs);
+  const est = mn === mx ? durStr(mn) : `${mn}–${mx} mnt`;
+  out.innerHTML = `
+    <div class="sum-card">
+      <div><small>Perkiraan waktu tempuh</small><b>${est}</b></div>
+      <div class="sum-route"><span>${dn(plan.from)}</span>${ic('arrow','mini')}<span>${dn(plan.to)}</span></div>
+    </div>
+    <div class="seg-label">Pilihan keberangkatan mulai ${toStr(plan.start)}</div>
+    <div class="jlist">${rs.map((j,i) => jCard(j, i, openSet.has(j.key))).join('')}</div>
+    ${plan.exhausted ? '' : `<button class="btn-soft wide" onclick="morePlan()">Tampilkan jadwal berikutnya</button>`}`;
+}
+function jCard(j, i, open){
+  const dur = j.arr - j.dep, tr = j.legs.length - 1;
+  const wait = j.dep - nowMin;
+  const waitTxt = plan.mode === 'now' ? (wait <= 0 ? 'Berangkat sekarang' : `Berangkat ${wait} mnt lagi`) : `KA ${j.legs[0].tr.ka}`;
+  const pills = j.legs.map((l,k) => (k ? `<span class="lsep">${ic('arrow','mini')}</span>` : '') + legPill(l)).join('');
+  return `<div class="jcard${open?' open':''}" data-key="${j.key}" style="--i:${i}">
+    <button class="j-main" onclick="toggleOpen(this.parentNode)">
+      <div class="j-times"><b>${toStr(j.dep)}</b>${ic('arrow','mini')}<b>${toStr(j.arr)}</b><span class="j-dur">${durStr(dur)}</span></div>
+      <div class="j-pills">${pills}</div>
+      <div class="j-meta"><span>${waitTxt}</span><span>${tr === 0 ? 'Langsung' : tr + ' transit'}</span>${ic('chev','ti-chev')}</div>
+    </button>
+    <div class="collapse"><div><div class="j-detail">${jDetail(j)}</div></div></div>
+  </div>`;
+}
+function jDetail(j){
+  return j.legs.map((l,k) => {
+    const c = lc(l.tr.line), stops = l.tr.st.slice(l.from, l.to+1);
+    const mid = stops.length - 2;
+    const rows = tlRows(stops);
+    const first = stops[0], last = stops[stops.length-1];
+    let transit = '';
+    if(k > 0){
+      const prev = j.legs[k-1], pa = prev.tr.st[prev.to].t, dp = first.t;
+      transit = `<div class="transit">${ic('swap-h')}<span>Transit di <b>${dn(STATIONS[first.s])}</b>, tunggu ${dp - pa} mnt</span></div>`;
+    }
+    return `${transit}<div class="leg" style="--lc:${c}">
+      <div class="leg-head">${legPill(l)}<span>KA ${l.tr.ka} · arah ${dn(l.tr.dest)}</span></div>
+      <div class="tl leg-tl" style="--lc:${c}" data-mid="${mid}">
+        <span class="tl-track"></span>
+        ${stopsWithMid(stops)}
+      </div>
+    </div>`;
   }).join('');
+}
+function stopsWithMid(stops){
+  const n = stops.length;
+  const row = (s,cls) => `<div class="tl-row ${cls}"><span class="tl-dot"></span><div class="tl-txt"><b>${dn(STATIONS[s.s])}</b></div><span class="tl-time">${toStr(s.t)}</span></div>`;
+  if(n <= 2) return stops.map((s,i) => row(s, i===0?'first':'last')).join('');
+  const mids = stops.slice(1, -1);
+  return row(stops[0],'first') +
+    `<div class="mid ${n > 7 ? '' : 'open'}"><button class="mid-btn" onclick="this.parentNode.classList.toggle('open')">${ic('chev')}<span>${mids.length} perhentian di antara</span></button>
+      <div class="collapse"><div>${mids.map(s => row(s,'')).join('')}</div></div></div>` +
+    row(stops[n-1],'last');
 }
 
 /* ===== TICK ===== */
@@ -347,48 +663,37 @@ function tickSecond(){
     if(isNaN(arr)) return;
     el.textContent = cdStr(arr);
     const cls = cdCls(arr);
-    if(el.id === 'heroCD'){
-      el.className = cls ? `hero-cd ${cls}` : 'hero-cd';
-    } else {
-      el.className = cls ? `ti-cd ${cls}` : 'ti-cd';
-    }
-    el.dataset.arrival = arr;
+    el.className = (el.id === 'heroCD' ? 'hero-cd' : 'ti-cd') + (cls ? ' ' + cls : '');
   });
-  if(curStation){
+  if(curStation && activeTab === 'jadwal'){
     const fresh = getUpcoming();
-    const heroEl  = document.getElementById('heroCD');
-    const heroArr = heroEl ? parseInt(heroEl.dataset.arrival) : null;
-    if(!fresh.length || (heroArr !== null && fresh[0].arrival !== heroArr)){
-      render();
-    }
+    const heroArr = parseInt($('heroCD').dataset.arrival);
+    if(!fresh.length || fresh[0].arrival !== heroArr) render();
   }
+  positionBadges();
 }
-
-function fullRefresh(){
-  updateClock();
-  if(curStation) render();
-}
+function fullRefresh(){ updateClock(); if(curStation) render(); }
 
 /* ===== INIT ===== */
 updateClock();
 renderRute();
-
-const savedTab = localStorage.getItem('anker_tab') || 'jadwal';
-switchTab(savedTab);
+switchTab(localStorage.getItem('anker_tab') || 'jadwal');
+$('navPill').style.transition = 'none'; $('navPill').style.transform = `translateX(${TABS.indexOf(activeTab)*100}%)`;
+requestAnimationFrame(() => $('navPill').style.transition = '');
 
 const saved = localStorage.getItem('anker_station');
 if(saved && STATIONS.includes(saved)){
   curStation = saved;
-  document.getElementById('scName').textContent = dn(saved);
-  const idx   = STATIONS.indexOf(saved);
-  const lines = [...new Set(SCHEDULE.filter(t => t.s[idx] !== undefined).map(lineOf))];
-  document.getElementById('scDot').style.background =
-    LINE_CFG[lines[0]]?.color || 'var(--accent)';
+  $('scName').textContent = dn(saved);
+  $('scDot').style.background = stationColor(saved);
   buildDirTabs();
-  render();
-} else {
-  render();
 }
+render();
+try{
+  const p = JSON.parse(localStorage.getItem('anker_plan') || '{}');
+  if(p.from && STATIONS.includes(p.from)) setPlanStationQuiet('from', p.from);
+  if(p.to && STATIONS.includes(p.to)) setPlanStationQuiet('to', p.to);
+}catch(e){}
 
 setInterval(tickSecond, 1000);
 setInterval(fullRefresh, 30000);

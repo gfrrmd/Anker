@@ -3,134 +3,145 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="theme-color" content="#16a34a"/>
   <title>Anker — Jadwal KRL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
-  <!-- FIXED HEADER -->
-  <header class="header">
-    <div class="live-badge"><span class="live-dot"></span>LIVE</div>
-    <span class="header-title" id="headerTitle">Jadwal KRL</span>
-    <div class="clock" id="clock">--:--</div>
-  </header>
+<!-- ICON SPRITE (tanpa emoji) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.2"/><path d="M12 7.2V21M8 11h8M4.5 14.5a7.5 7.5 0 0015 0M4.5 14.5l-1.5 1.5M19.5 14.5l1.5 1.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="2.3"/><circle cx="18" cy="5" r="2.3"/><path d="M8.3 19H15a3.5 3.5 0 000-7H9a3.5 3.5 0 010-7h6.7"/></symbol>
+    <symbol id="i-track" viewBox="0 0 24 24"><path d="M8.5 3L5 21M15.5 3L19 21M6.6 8h10.8M5.8 13h12.4M5 18h14"/></symbol>
+    <symbol id="i-train" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="14" rx="4"/><path d="M5 10.5h14M8 21l2.2-4M16 21l-2.2-4"/><circle cx="9" cy="13.8" r=".9" fill="currentColor" stroke="none"/><circle cx="15" cy="13.8" r=".9" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5L16 16"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 20V4M7 4L3.5 7.5M7 4l3.5 3.5M17 4v16M17 20l-3.5-3.5M17 20l3.5-3.5"/></symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11A6.5 6.5 0 0118.5 10c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+    <symbol id="i-swap-h" viewBox="0 0 24 24"><path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/></symbol>
+    <symbol id="i-hist" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 108.5-8.5A8.6 8.6 0 005.4 6.8M3.5 4v3.5H7M12 8v4.2l2.8 1.6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  </defs>
+</svg>
 
-  <!-- ===== TAB: JADWAL ===== -->
-  <div class="page" id="pageJadwal">
+<header class="header">
+  <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+  <div class="header-title"><svg class="ic logo"><use href="#i-anchor"/></svg><span id="headerTitle">Jadwal KRL</span></div>
+  <div class="clock" id="clock">--:--</div>
+</header>
 
-    <div class="station-card" id="stationCard" onclick="openSearch()">
-      <div class="sc-label">STASIUN KAMU</div>
-      <div class="sc-row">
-        <span class="sc-dot" id="scDot"></span>
-        <span class="sc-name" id="scName">Pilih Stasiun</span>
-        <svg class="sc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </div>
+<main>
+<!-- ===== TAB: JADWAL ===== -->
+<section class="page" id="pageJadwal">
+  <button class="station-card" id="stationCard" onclick="openSearch('jadwal')">
+    <div class="sc-label">Stasiun kamu</div>
+    <div class="sc-row">
+      <span class="sc-dot" id="scDot"></span>
+      <span class="sc-name" id="scName">Pilih stasiun</span>
+      <svg class="ic sc-chevron"><use href="#i-search"/></svg>
     </div>
+  </button>
 
-    <div class="filter-row" id="dirRow" style="display:none">
-      <button class="fpill active" data-dir="ALL" onclick="setDir(this,'ALL')">Semua</button>
-      <div id="dirBtns" style="display:contents"></div>
-    </div>
-
-    <div id="heroSection" style="display:none">
-      <div class="hero-pre-label">
-        <span class="flash-dot"></span>
-        <span>SEGERA BERANGKAT</span>
-      </div>
-      <div class="hero-card" id="heroCard">
-        <div class="hero-top">
-          <span class="hero-time" id="heroTime">--:--</span>
-          <span class="hero-badge" id="heroBadge"></span>
-        </div>
-        <div class="hero-direction-lbl">KE ARAH</div>
-        <div class="hero-dest" id="heroDest">—</div>
-        <div class="hero-cd" id="heroCD">--:--</div>
-        <div class="hero-cd-lbl">MENIT : DETIK</div>
-      </div>
-    </div>
-
-    <div id="listSection" style="display:none">
-      <div class="seg-label">SELANJUTNYA</div>
-      <div class="train-list" id="trainList"></div>
-    </div>
-
-    <div id="emptyState" class="empty-state">
-      <div class="empty-icon">
-        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="14" y="8" width="36" height="40" rx="6"/>
-          <rect x="21" y="16" width="9" height="10" rx="2" fill="currentColor" opacity=".3"/>
-          <rect x="34" y="16" width="9" height="10" rx="2" fill="currentColor" opacity=".3"/>
-          <rect x="21" y="30" width="22" height="3" rx="1.5" fill="currentColor" opacity=".25"/>
-          <circle cx="23" cy="44" r="3" fill="currentColor" opacity=".4"/>
-          <circle cx="41" cy="44" r="3" fill="currentColor" opacity=".4"/>
-          <path d="M8 56 h48" stroke-linecap="round"/>
-          <path d="M4 56 h4 M56 56 h4" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <p>Pilih stasiun untuk melihat<br>jadwal kereta mendatang</p>
-    </div>
-
-    <div id="noTrains" style="display:none" class="empty-state">
-      <div class="empty-icon">
-        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="32" cy="32" r="24"/>
-          <path d="M20 20 L44 44 M44 20 L20 44" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <p>Tidak ada kereta mendatang<br>dalam 4 jam ke depan</p>
-    </div>
-
+  <div class="filter-row" id="dirRow" hidden>
+    <button class="fpill active" data-dir="ALL" onclick="setDir(this,'ALL')">Semua arah</button>
+    <div id="dirBtns" style="display:contents"></div>
   </div>
 
-  <!-- ===== TAB: RUTE ===== -->
-  <div class="page" id="pageRute" style="display:none">
-    <div class="rute-section-label">JABODETABEK</div>
-    <div class="line-list" id="lineList"></div>
-  </div>
-
-  <!-- BOTTOM NAV -->
-  <nav class="bottom-nav">
-    <button class="bnav-item active" id="btnJadwal" onclick="switchTab('jadwal')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9"/>
-        <polyline points="12 7 12 12 15.5 15.5"/>
-      </svg>
-      <span>Jadwal</span>
-    </button>
-    <button class="bnav-item" id="btnRute" onclick="switchTab('rute')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <!-- S curve path -->
-        <path d="M17 5 Q17 3 15 3 H10 Q7 3 7 6 Q7 9 12 10 Q17 11 17 15 Q17 18 14 18 H9 Q7 18 7 16"/>
-        <!-- dot top-right -->
-        <circle cx="17" cy="5" r="1.5" fill="currentColor" stroke="none"/>
-        <!-- dot middle -->
-        <circle cx="12" cy="10.5" r="1.5" fill="currentColor" stroke="none"/>
-        <!-- dot bottom-left -->
-        <circle cx="7" cy="16" r="1.5" fill="currentColor" stroke="none"/>
-      </svg>
-      <span>Rute</span>
-    </button>
-  </nav>
-
-  <!-- SEARCH OVERLAY -->
-  <div class="search-overlay" id="searchOverlay" onclick="handleOverlayClick(event)">
-    <div class="search-modal">
-      <div class="search-bar">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input id="searchInput" class="search-input" type="text"
-          placeholder="Cari nama stasiun..." autocomplete="off"/>
-        <button class="search-cancel" onclick="closeSearch()">Batal</button>
+  <div id="heroSection" hidden>
+    <div class="hero-pre-label"><span class="flash-dot"></span><span>Segera berangkat</span></div>
+    <div class="hero-card" id="heroCard">
+      <div class="hero-top">
+        <span class="hero-time" id="heroTime">--:--</span>
+        <span class="hero-badge" id="heroBadge"></span>
       </div>
-      <ul id="searchList" class="search-list"></ul>
+      <div class="hero-direction-lbl">Ke arah</div>
+      <div class="hero-dest" id="heroDest">—</div>
+      <div class="hero-cd" id="heroCD">--:--</div>
+      <div class="hero-cd-lbl">menit : detik</div>
+      <svg class="hero-train ic"><use href="#i-train"/></svg>
     </div>
   </div>
 
-  <script src="data.js"></script>
-  <script src="app.js"></script>
+  <div id="listSection" hidden>
+    <div class="seg-label">Selanjutnya</div>
+    <div class="train-list" id="trainList"></div>
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    <div class="empty-icon"><svg class="ic"><use href="#i-train"/></svg></div>
+    <p>Pilih stasiun untuk melihat<br>jadwal kereta mendatang</p>
+    <button class="btn-soft" onclick="openSearch('jadwal')">Cari stasiun</button>
+  </div>
+
+  <div id="noTrains" class="empty-state" hidden>
+    <div class="empty-icon"><svg class="ic"><use href="#i-clock"/></svg></div>
+    <p>Tidak ada kereta mendatang<br>dalam 4 jam ke depan</p>
+  </div>
+</section>
+
+<!-- ===== TAB: RUTE (PLANNER) ===== -->
+<section class="page" id="pageRute" hidden>
+  <div class="plan-card">
+    <div class="plan-fields">
+      <div class="plan-rail"><span class="pr-from"></span><span class="pr-line"></span><svg class="ic pr-to"><use href="#i-pin"/></svg></div>
+      <div class="plan-inputs">
+        <button class="plan-field" id="fieldFrom" onclick="openSearch('from')"><small>Dari</small><b id="pfFrom" class="ph">Pilih stasiun asal</b></button>
+        <button class="plan-field" id="fieldTo" onclick="openSearch('to')"><small>Ke</small><b id="pfTo" class="ph">Pilih stasiun tujuan</b></button>
+      </div>
+      <button class="swap-btn" onclick="swapPlan()" aria-label="Tukar asal dan tujuan"><svg class="ic"><use href="#i-swap"/></svg></button>
+    </div>
+
+    <div class="seg" id="timeSeg">
+      <span class="seg-thumb" id="segThumb"></span>
+      <button class="active" data-m="now" onclick="setTimeMode('now')">Berangkat sekarang</button>
+      <button data-m="time" onclick="setTimeMode('time')">Pilih jam</button>
+    </div>
+    <div class="collapse" id="timeBox"><div>
+      <label class="time-pick"><svg class="ic"><use href="#i-clock"/></svg><span>Mulai perjalanan pukul</span><input type="time" id="timeInput" value="08:00"/></label>
+    </div></div>
+
+    <button class="btn-primary" id="btnPlan" onclick="runPlan()">Cari rute</button>
+  </div>
+
+  <div id="planOut"></div>
+</section>
+
+<!-- ===== TAB: JALUR ===== -->
+<section class="page" id="pageJalur" hidden>
+  <div class="seg-label">Jabodetabek — ketuk jalur untuk melihat kereta yang sedang berjalan</div>
+  <div class="line-list" id="lineList"></div>
+</section>
+</main>
+
+<nav class="bottom-nav" aria-label="Navigasi utama">
+  <span class="nav-pill" id="navPill"></span>
+  <button class="bnav-item active" id="btnJadwal" onclick="switchTab('jadwal')"><svg class="ic"><use href="#i-clock"/></svg><span>Jadwal</span></button>
+  <button class="bnav-item" id="btnRute" onclick="switchTab('rute')"><svg class="ic"><use href="#i-route"/></svg><span>Rute</span></button>
+  <button class="bnav-item" id="btnJalur" onclick="switchTab('jalur')"><svg class="ic"><use href="#i-track"/></svg><span>Jalur</span></button>
+</nav>
+
+<!-- SEARCH OVERLAY -->
+<div class="search-overlay" id="searchOverlay" onclick="handleOverlayClick(event)">
+  <div class="search-modal">
+    <div class="search-bar">
+      <svg class="ic search-icon"><use href="#i-search"/></svg>
+      <input id="searchInput" class="search-input" type="text" placeholder="Cari nama stasiun" autocomplete="off" enterkeyhint="search"/>
+      <button class="search-cancel" onclick="closeSearch()">Batal</button>
+    </div>
+    <div class="search-title" id="searchTitle"></div>
+    <div id="searchBody" class="search-body"></div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
