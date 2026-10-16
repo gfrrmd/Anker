@@ -309,3 +309,8 @@ b{font-weight:700}
 .leg-head span{flex-basis:100%;padding-left:20px}
 .leg-head .ic{color:var(--muted)}
 .ti-main::before{display:block}
+
+.est-tag{color:#b45f00!important}
+@media(prefers-color-scheme:dark){.est-tag{color:#ffb35c!important}}
+.tl-est{color:#b45f00!important;font-weight:600}
+@media(prefers-color-scheme:dark){.tl-est{color:#ffb35c!important}}

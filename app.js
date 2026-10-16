@@ -134,9 +134,57 @@ function trips(){
     if(weekend && /Batal/.test(t.n) && /Sabtu|Minggu/.test(t.n)) return;
     const st = Object.entries(t.s).map(([k,v]) => ({s:+k, t:v})).sort((a,b) => a.t-b.t);
     const parts = t.r.split(' - ');
-    TRIPS.push({ id:i, line:lineOf(t), ka:t.k, r:t.r, org:parts[0].trim(), dest:parts[parts.length-1].split('/').pop().trim(), st, m:t.s });
+    const dest = parts[parts.length-1].split('/').pop().trim();
+    let di = sIdx(dest); if(di < 0) di = STATIONS.findIndex(x => dn(x) === dest);
+    TRIPS.push({ id:i, line:lineOf(t), ka:t.k, r:t.r, org:parts[0].trim(), dest, di, st, m:{...t.s}, est:new Set() });
   });
+  extendTrips(TRIPS);
   return TRIPS;
+}
+
+
+/* Data sumber memotong daftar stasiun sebelum tujuan akhir (mis. KA tujuan Bekasi berhenti di Kramat).
+   Sisa stasiun disambung dari kereta lain, waktunya ditandai sebagai perkiraan (est). */
+function extendTrips(TS){
+  const byDest = {};
+  TS.forEach(t => { (byDest[t.di] = byDest[t.di] || []).push(t); });
+  const push = (t, s, time) => { t.st.push({ s, t:time, est:true }); t.m[s] = time; t.est.add(s); };
+  TS.forEach(t => {
+    if(t.di < 0 || t.m[t.di] !== undefined) return;
+    for(let round=0; round<8 && t.m[t.di] === undefined; round++){
+      const last = t.st[t.st.length-1], L = last.s;
+      // A: kereta lain bertujuan sama yang melanjutkan setelah stasiun L
+      let bestA = null;
+      for(const d of byDest[t.di] || []){
+        if(d === t || d.m[L] === undefined) continue;
+        let after = d.st.filter(x => x.t > d.m[L] && t.m[x.s] === undefined);
+        const cut = after.findIndex(x => x.s === t.di);
+        if(cut >= 0) after = after.slice(0, cut+1);
+        if(!after.length) continue;
+        const gap = Math.abs(d.m[L] - last.t);
+        if(!bestA || after.length > bestA.after.length || (after.length === bestA.after.length && gap < bestA.gap)) bestA = { d, after, gap };
+      }
+      if(bestA){
+        const off = last.t - bestA.d.m[L];
+        bestA.after.forEach(x => push(t, x.s, x.t + off));
+        continue;
+      }
+      // B: kereta arah sebaliknya yang melewati tujuan lalu stasiun L (dibaca terbalik)
+      let bestB = null;
+      for(const r of TS){
+        if(r === t || r.m[t.di] === undefined || r.m[L] === undefined || r.m[t.di] >= r.m[L]) continue;
+        const seg = r.st.filter(x => x.t >= r.m[t.di] && x.t < r.m[L] && t.m[x.s] === undefined);
+        if(!seg.length) continue;
+        const gap = Math.abs(r.m[L] - last.t);
+        if(!bestB || seg.length > bestB.seg.length || (seg.length === bestB.seg.length && gap < bestB.gap)) bestB = { r, seg, gap };
+      }
+      if(bestB){
+        for(let i = bestB.seg.length-1; i >= 0; i--) push(t, bestB.seg[i].s, last.t + (bestB.r.m[L] - bestB.seg[i].t));
+        continue;
+      }
+      break;
+    }
+  });
 }
 
 /* ===== CLOCK ===== */
@@ -302,6 +350,7 @@ function render(){
   $('heroTime').textContent  = toStr(f.arrival);
   $('heroBadge').textContent = ln(f.line);
   $('heroDest').textContent  = f.dest;
+  document.querySelector('.hero-cd-lbl').textContent = f.trip.est.has(sIdx(curStation)) ? 'menit : detik · jam perkiraan' : 'menit : detik';
   const hcd = $('heroCD');
   hcd.textContent = cdStr(f.arrival);
   hcd.dataset.arrival = f.arrival;
@@ -317,7 +366,7 @@ function render(){
         <span class="ti-time">${toStr(tr.arrival)}</span>
         <span class="ti-body">
           <span class="ti-dest">${ic('arrow','mini')}${tr.dest}</span>
-          <span class="ti-sub">${ln(tr.line)} · KA ${tr.ka}</span>
+          <span class="ti-sub">${ln(tr.line)} · KA ${tr.ka}${tr.trip.est.has(sIdx(curStation)) ? ' · perkiraan' : ''}</span>
         </span>
         <span class="ti-cd ${cdCls(tr.arrival)}" data-arrival="${tr.arrival}">${cdStr(tr.arrival)}</span>
       </div>
@@ -562,11 +611,12 @@ function jCard(j, i, open){
     <button class="j-main" onclick="toggleJ(this.parentNode)">
       <div class="j-times"><b>${toStr(j.dep)}</b>${ic('arrow','mini')}<b>${toStr(j.arr)}</b><span class="j-dur">${durStr(dur)}</span></div>
       <div class="j-pills">${pills}</div>
-      <div class="j-meta"><span>${waitTxt}</span><span>${tr === 0 ? 'Langsung' : tr + ' transit'}</span>${ic('chev','ti-chev')}</div>
+      <div class="j-meta"><span>${waitTxt}</span>${isEst(j) ? '<span class="est-tag">jam perkiraan</span>' : ''}<span>${tr === 0 ? 'Langsung' : tr + ' transit'}</span>${ic('chev','ti-chev')}</div>
     </button>
     <div class="collapse"><div><div class="j-detail">${jDetail(j)}</div></div></div>
   </div>`;
 }
+function isEst(j){ return j.legs.some(l => l.tr.st.slice(l.from, l.to+1).some(x => x.est)); }
 function toggleJ(el){ toggleOpen(el); settleBadges(500); }
 function jDetail(j){
   return j.legs.map((l,k) => {
@@ -590,7 +640,7 @@ function jDetail(j){
 }
 function stopsWithMid(stops){
   const n = stops.length;
-  const row = (s,cls) => `<div class="tl-row ${cls}" data-t="${s.t}"><span class="tl-dot"></span><div class="tl-txt"><b>${dn(STATIONS[s.s])}</b></div><span class="tl-time">${toStr(s.t)}</span></div>`;
+  const row = (s,cls) => `<div class="tl-row ${cls}" data-t="${s.t}"><span class="tl-dot"></span><div class="tl-txt"><b>${dn(STATIONS[s.s])}</b>${s.est ? '<small class="tl-est">perkiraan</small>' : ''}</div><span class="tl-time">${toStr(s.t)}</span></div>`;
   if(n <= 2) return stops.map((s,i) => row(s, i===0?'first':'last')).join('');
   const mids = stops.slice(1, -1);
   return row(stops[0],'first') +
