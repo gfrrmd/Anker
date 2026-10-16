@@ -86,7 +86,6 @@ let nowMin = 0, nowSec = 0;
 let activeTab = 'jadwal';
 let searchTarget = 'jadwal';
 const plan = { from:null, to:null, mode:'now', time:'08:00', results:[], cursor:0, key:'' };
-const openTrips = new Set();
 
 /* ===== UTILS ===== */
 const $ = id => document.getElementById(id);
@@ -103,7 +102,11 @@ function getWIB(){
 function toStr(m){ return m == null ? '--:--' : `${pad(Math.floor(m/60)%24)}:${pad(m%60)}`; }
 function nowF(){ return nowMin + nowSec/60; }
 function lineOf(t){ return LINE_MAP[t.l] || t.l; }
-function durStr(m){ return m >= 60 ? `${Math.floor(m/60)} j ${m%60} mnt` : `${m} mnt`; }
+function durStr(m){
+  const h = Math.floor(m/60), mm = m % 60;
+  if(!h) return `${mm} menit`;
+  return mm ? `${h} jam ${mm} menit` : `${h} jam`;
+}
 function lc(key){ return (LINE_CFG[key] && LINE_CFG[key].color) || '#16a34a'; }
 function ln(key){ return (LINE_CFG[key] && LINE_CFG[key].name) || key; }
 
@@ -308,33 +311,17 @@ function render(){
   const rest = list.slice(1);
   if(!rest.length){ setHidden('listSection', true); return; }
   setHidden('listSection', false);
-  const idx = sIdx(curStation);
-  $('trainList').innerHTML = rest.map((tr,i) => {
-    const key = tr.trip.id + ':' + tr.arrival;
-    const stops = tr.trip.st.filter(s => s.t >= tr.arrival || s.s === idx);
-    const open = openTrips.has(key);
-    return `<div class="train-item${open?' open':''}" data-key="${key}" data-trip="${tr.trip.id}" style="--lc:${lc(tr.line)};--i:${i}">
-      <button class="ti-main" onclick="toggleTrain(this.parentNode)">
+  $('trainList').innerHTML = rest.map((tr,i) => `
+    <div class="train-item" style="--lc:${lc(tr.line)};--i:${i}">
+      <div class="ti-main">
         <span class="ti-time">${toStr(tr.arrival)}</span>
         <span class="ti-body">
           <span class="ti-dest">${ic('arrow','mini')}${tr.dest}</span>
           <span class="ti-sub">${ln(tr.line)} · KA ${tr.ka}</span>
         </span>
         <span class="ti-cd ${cdCls(tr.arrival)}" data-arrival="${tr.arrival}">${cdStr(tr.arrival)}</span>
-        ${ic('chev','ti-chev')}
-      </button>
-      <div class="collapse"><div><div class="ti-detail hide-passed">${open ? timeline(tr.trip.st, lc(tr.line)) : ''}</div></div></div>
-    </div>`;
-  }).join('');
-  if(openTrips.size) settleBadges();
-}
-function toggleTrain(el){
-  const key = el.dataset.key, trip = trips().find(t => t.id === +el.dataset.trip);
-  const open = toggleOpen(el);
-  open ? openTrips.add(key) : openTrips.delete(key);
-  const box = el.querySelector('.ti-detail');
-  if(open && !box.innerHTML) box.innerHTML = timeline(trip.st, lc(trip.line));
-  settleBadges(480);
+      </div>
+    </div>`).join('');
 }
 
 function buildDirTabs(){
@@ -544,10 +531,6 @@ function morePlan(){
   if(add.length) plan.cursor = add[add.length-1].dep + 1;
   renderPlan(true);
 }
-function legPill(l){
-  const c = lc(l.tr.line);
-  return `<span class="lpill" style="--lc:${c}"><i></i>${ln(l.tr.line)}</span>`;
-}
 function renderPlan(keepOpen){
   const out = $('planOut'), rs = plan.results;
   const openSet = new Set([...document.querySelectorAll('.jcard.open')].map(e => e.dataset.key));
@@ -556,10 +539,11 @@ function renderPlan(keepOpen){
     return;
   }
   const durs = rs.map(j => j.arr - j.dep), mn = Math.min(...durs), mx = Math.max(...durs);
-  const est = mn === mx ? durStr(mn) : `${mn}–${mx} mnt`;
+  const est = durStr(mn);
+  const estSub = mn === mx ? '' : `<span>paling lama ${durStr(mx)}</span>`;
   out.innerHTML = `
     <div class="sum-card">
-      <div><small>Perkiraan waktu tempuh</small><b>${est}</b></div>
+      <div><small>Perkiraan waktu tempuh tercepat</small><b>${est}</b>${estSub}</div>
       <div class="sum-route"><span>${dn(plan.from)}</span>${ic('arrow','mini')}<span>${dn(plan.to)}</span></div>
     </div>
     <div class="seg-label">Pilihan keberangkatan mulai ${toStr(plan.start)}</div>
@@ -571,7 +555,9 @@ function jCard(j, i, open){
   const dur = j.arr - j.dep, tr = j.legs.length - 1;
   const wait = j.dep - nowMin;
   const waitTxt = plan.mode === 'now' ? (wait <= 0 ? 'Berangkat sekarang' : `Berangkat ${wait} mnt lagi`) : `KA ${j.legs[0].tr.ka}`;
-  const pills = j.legs.map((l,k) => (k ? `<span class="lsep">${ic('arrow','mini')}</span>` : '') + legPill(l)).join('');
+  const names = [j.legs[0].tr.st[j.legs[0].from].s, ...j.legs.map(l => l.tr.st[l.to].s)];
+  const pills = names.map((n,k) => (k ? `<span class="lsep">${ic('arrow','mini')}</span>` : '') +
+    `<span class="lpill" style="--lc:${lc(j.legs[Math.min(k, j.legs.length-1)].tr.line)}"><i></i>${dn(STATIONS[n])}</span>`).join('');
   return `<div class="jcard${open?' open':''}" data-key="${j.key}" style="--i:${i}">
     <button class="j-main" onclick="toggleJ(this.parentNode)">
       <div class="j-times"><b>${toStr(j.dep)}</b>${ic('arrow','mini')}<b>${toStr(j.arr)}</b><span class="j-dur">${durStr(dur)}</span></div>
@@ -594,7 +580,7 @@ function jDetail(j){
       transit = `<div class="transit">${ic('swap-h')}<span>Transit di <b>${dn(STATIONS[first.s])}</b>, tunggu ${dp - pa} mnt</span></div>`;
     }
     return `${transit}<div class="leg" style="--lc:${c}">
-      <div class="leg-head">${legPill(l)}<span>KA ${l.tr.ka} · arah ${dn(l.tr.dest)}</span></div>
+      <div class="leg-head"><i></i><b>${dn(STATIONS[first.s])}</b>${ic('arrow','mini')}<b>${dn(STATIONS[last.s])}</b><span>KA ${l.tr.ka} · arah ${dn(l.tr.dest)}</span></div>
       <div class="tl live leg-tl" style="--lc:${c}">
         <span class="tl-track"></span><span class="tl-ahead"></span><span class="tl-badge">${ic('train')}</span>
         ${stopsWithMid(stops)}
