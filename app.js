@@ -87,8 +87,6 @@ let activeTab = 'jadwal';
 let searchTarget = 'jadwal';
 const plan = { from:null, to:null, mode:'now', time:'08:00', results:[], cursor:0, key:'' };
 const openTrips = new Set();
-const lineSel = {};          // idx -> trip id
-let hidePassed = true;
 
 /* ===== UTILS ===== */
 const $ = id => document.getElementById(id);
@@ -164,7 +162,7 @@ function switchTab(tab){
   });
   $('headerTitle').textContent = TAB_TITLE[tab];
   $('navPill').style.transform = `translateX(${TABS.indexOf(tab)*100}%)`;
-  if(tab === 'jalur') requestAnimationFrame(positionBadges);
+  if(tab !== 'jalur') requestAnimationFrame(positionBadges);
 }
 
 /* ===== TIMELINE (bullet kereta berjalan) ===== */
@@ -200,9 +198,14 @@ function positionBadges(){
       const isNext = !passed && !nextSet;
       if(isNext) nextSet = true;
       r.classList.toggle('next', isNext);
-      r.querySelector('.tl-st').textContent = passed ? 'Sudah berangkat' : 'Dijadwalkan';
+      const st = r.querySelector('.tl-st'); if(st) st.textContent = passed ? 'Sudah berangkat' : 'Dijadwalkan';
     });
-    const center = r => r.offsetTop + r.offsetHeight/2;
+    const top0 = tl.getBoundingClientRect().top;
+    const center = r => {
+      const m = r.closest('.mid:not(.open)');
+      const bb = (m ? m.querySelector('.mid-btn') : r).getBoundingClientRect();
+      return bb.top - top0 + bb.height/2;
+    };
     const firstT = +rows[0].dataset.t*60, lastT = +rows[rows.length-1].dataset.t*60;
     if(now < firstT) status = 'before';
     else if(now >= lastT) status = 'after';
@@ -243,67 +246,20 @@ function toggleOpen(el, force){
   return open;
 }
 
-/* ===== JALUR (accordion + kereta berjalan) ===== */
-function lineTrips(key){
-  return trips().filter(t => key === 'NAMBO' ? /Nambo/.test(t.r) : t.line === key);
-}
-function pickChips(key){
-  const f = nowF(), all = lineTrips(key);
-  const act = all.filter(t => t.st[0].t <= f && t.st[t.st.length-1].t >= f).sort((a,b) => b.st[0].t - a.st[0].t).slice(0,4);
-  const up  = all.filter(t => t.st[0].t > f).sort((a,b) => a.st[0].t - b.st[0].t).slice(0, 8 - act.length);
-  return [...act, ...up];
-}
+/* ===== JALUR (daftar stasiun statis) ===== */
 function renderRute(){
   $('lineList').innerHTML = LINES_DATA.map((line, idx) => {
     const c = lc(line.key);
+    const rows = line.stations.map(n => `<div class="sl-item"><span class="sl-dot"></span><span class="sl-name">${n}</span></div>`).join('');
     return `<div class="line-item" id="lineItem${idx}" style="--lc:${c}">
-      <button class="line-header" onclick="toggleLine(${idx})">
+      <button class="line-header" onclick="toggleOpen($('lineItem${idx}'))">
         <span class="line-bar"></span>
         <span class="line-info"><span class="line-name">${line.name}</span><span class="line-route">${line.route}</span></span>
         <span class="line-meta"><span class="line-count">${line.stations.length} stasiun</span>${ic('chev','line-chevron')}</span>
       </button>
-      <div class="collapse"><div><div class="line-panel" id="linePanel${idx}"></div></div></div>
+      <div class="collapse"><div><div class="sl-list">${rows}</div></div></div>
     </div>`;
   }).join('');
-}
-function toggleLine(idx){
-  const el = $('lineItem' + idx);
-  const open = toggleOpen(el);
-  if(open){ buildLinePanel(idx); setTimeout(settleBadges, 20); settleBadges(520); }
-}
-function buildLinePanel(idx){
-  const line = LINES_DATA[idx], list = pickChips(line.key), c = lc(line.key);
-  const panel = $('linePanel' + idx);
-  if(!list.length){
-    panel.innerHTML = `<div class="panel-empty">Belum ada kereta pada jalur ini saat ini.</div>`;
-    return;
-  }
-  let sel = list.find(t => t.id === lineSel[idx]) || list[0];
-  lineSel[idx] = sel.id;
-  const f = nowF();
-  const chips = list.map(t => {
-    const run = t.st[0].t <= f;
-    return `<button class="tchip${t.id===sel.id?' active':''}" onclick="pickLineTrip(${idx},${t.id})">
-      <b>${toStr(t.st[0].t)}</b><small>${run ? 'Berjalan' : dn(t.dest)}</small></button>`;
-  }).join('');
-  panel.innerHTML = `
-    <div class="chips">${chips}</div>
-    <div class="tl-head">
-      <div><b>KA ${sel.ka}</b><small>${dn(sel.org)} ${ic('arrow','mini')} ${dn(sel.dest)}</small></div>
-      <button class="tl-toggle${hidePassed?' on':''}" onclick="togglePassed()">${ic('chev')}<span>${hidePassed ? 'Tampilkan' : 'Sembunyikan'} perhentian sebelumnya</span></button>
-    </div>
-    <div class="tl-wrap${hidePassed?' hide-passed':''}">${timeline(sel.st, c)}</div>`;
-  positionBadges();
-}
-function pickLineTrip(idx, id){ lineSel[idx] = id; buildLinePanel(idx); settleBadges(); }
-function togglePassed(){
-  hidePassed = !hidePassed;
-  document.querySelectorAll('.tl-wrap').forEach(w => w.classList.toggle('hide-passed', hidePassed));
-  document.querySelectorAll('.tl-toggle').forEach(b => {
-    b.classList.toggle('on', hidePassed);
-    b.querySelector('span').textContent = (hidePassed ? 'Tampilkan' : 'Sembunyikan') + ' perhentian sebelumnya';
-  });
-  settleBadges(500);
 }
 
 /* ===== JADWAL ===== */
@@ -609,6 +565,7 @@ function renderPlan(keepOpen){
     <div class="seg-label">Pilihan keberangkatan mulai ${toStr(plan.start)}</div>
     <div class="jlist">${rs.map((j,i) => jCard(j, i, openSet.has(j.key))).join('')}</div>
     ${plan.exhausted ? '' : `<button class="btn-soft wide" onclick="morePlan()">Tampilkan jadwal berikutnya</button>`}`;
+  settleBadges(60);
 }
 function jCard(j, i, open){
   const dur = j.arr - j.dep, tr = j.legs.length - 1;
@@ -616,7 +573,7 @@ function jCard(j, i, open){
   const waitTxt = plan.mode === 'now' ? (wait <= 0 ? 'Berangkat sekarang' : `Berangkat ${wait} mnt lagi`) : `KA ${j.legs[0].tr.ka}`;
   const pills = j.legs.map((l,k) => (k ? `<span class="lsep">${ic('arrow','mini')}</span>` : '') + legPill(l)).join('');
   return `<div class="jcard${open?' open':''}" data-key="${j.key}" style="--i:${i}">
-    <button class="j-main" onclick="toggleOpen(this.parentNode)">
+    <button class="j-main" onclick="toggleJ(this.parentNode)">
       <div class="j-times"><b>${toStr(j.dep)}</b>${ic('arrow','mini')}<b>${toStr(j.arr)}</b><span class="j-dur">${durStr(dur)}</span></div>
       <div class="j-pills">${pills}</div>
       <div class="j-meta"><span>${waitTxt}</span><span>${tr === 0 ? 'Langsung' : tr + ' transit'}</span>${ic('chev','ti-chev')}</div>
@@ -624,6 +581,7 @@ function jCard(j, i, open){
     <div class="collapse"><div><div class="j-detail">${jDetail(j)}</div></div></div>
   </div>`;
 }
+function toggleJ(el){ toggleOpen(el); settleBadges(500); }
 function jDetail(j){
   return j.legs.map((l,k) => {
     const c = lc(l.tr.line), stops = l.tr.st.slice(l.from, l.to+1);
@@ -637,8 +595,8 @@ function jDetail(j){
     }
     return `${transit}<div class="leg" style="--lc:${c}">
       <div class="leg-head">${legPill(l)}<span>KA ${l.tr.ka} · arah ${dn(l.tr.dest)}</span></div>
-      <div class="tl leg-tl" style="--lc:${c}" data-mid="${mid}">
-        <span class="tl-track"></span>
+      <div class="tl live leg-tl" style="--lc:${c}">
+        <span class="tl-track"></span><span class="tl-ahead"></span><span class="tl-badge">${ic('train')}</span>
         ${stopsWithMid(stops)}
       </div>
     </div>`;
@@ -646,11 +604,11 @@ function jDetail(j){
 }
 function stopsWithMid(stops){
   const n = stops.length;
-  const row = (s,cls) => `<div class="tl-row ${cls}"><span class="tl-dot"></span><div class="tl-txt"><b>${dn(STATIONS[s.s])}</b></div><span class="tl-time">${toStr(s.t)}</span></div>`;
+  const row = (s,cls) => `<div class="tl-row ${cls}" data-t="${s.t}"><span class="tl-dot"></span><div class="tl-txt"><b>${dn(STATIONS[s.s])}</b></div><span class="tl-time">${toStr(s.t)}</span></div>`;
   if(n <= 2) return stops.map((s,i) => row(s, i===0?'first':'last')).join('');
   const mids = stops.slice(1, -1);
   return row(stops[0],'first') +
-    `<div class="mid ${n > 7 ? '' : 'open'}"><button class="mid-btn" onclick="this.parentNode.classList.toggle('open')">${ic('chev')}<span>${mids.length} perhentian di antara</span></button>
+    `<div class="mid ${n > 7 ? '' : 'open'}"><button class="mid-btn" onclick="this.parentNode.classList.toggle('open');settleBadges(500)">${ic('chev')}<span>${mids.length} perhentian di antara</span></button>
       <div class="collapse"><div>${mids.map(s => row(s,'')).join('')}</div></div></div>` +
     row(stops[n-1],'last');
 }
